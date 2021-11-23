@@ -5,23 +5,23 @@ include Array
 (* smaller array, without elt at index 'i' *)
 let remove i a =
   let n = length a in
-  assert(i >= 0 && i < n);
+  assert (i >= 0 && i < n);
   let res = make (n - 1) (unsafe_get a 0) in
   let j = ref 0 in
   for i' = 0 to n - 1 do
-    if i' <> i then
-      (unsafe_set res !j (unsafe_get a i');
-       incr j)
+    if i' <> i then (
+      unsafe_set res !j (unsafe_get a i');
+      incr j)
   done;
   res
 
 (* <=> List.partition *)
 let partition p a =
   let ok, ko =
-    fold_right (fun x (ok_acc, ko_acc) ->
-        if p x then (x :: ok_acc, ko_acc)
-        else (ok_acc, x :: ko_acc)
-      ) a ([], [])
+    fold_right
+      (fun x (ok_acc, ko_acc) ->
+        if p x then (x :: ok_acc, ko_acc) else (ok_acc, x :: ko_acc))
+      a ([], [])
   in
   (of_list ok, of_list ko)
 
@@ -57,8 +57,8 @@ let min_max_def a def =
 (* get one bootstrap sample of 'size' using sampling with replacement *)
 let bootstrap_sample rng size a =
   let n = length a in
-  assert(n > 0);
-  assert(size < n);
+  assert (n > 0);
+  assert (size < n);
   let res = make size (unsafe_get a 0) in
   for i = 0 to size - 1 do
     let rand = Random.State.int rng n in
