@@ -11,8 +11,8 @@ module type Point = sig
       (dist x x = 0.0, NaN is not a proper distance, etc). *)
 end
 
-module Make : functor (P : Point) -> sig
-  type t
+module Make (P : Point) : sig
+  type t [@@deriving sexp]
   (** A vantage point tree. *)
 
   (** Quality of the constructed tree.
@@ -72,5 +72,6 @@ module Make : functor (P : Point) -> sig
       If invariant doesn't hold, then this library has a bug
       (or your distance function is not a proper metric). *)
 
-  val range : float -> float -> t -> t -> unit
+  val range :
+    float -> float -> t -> t -> f:('a -> P.t -> P.t -> 'a) -> init:'a -> 'a
 end

@@ -1,5 +1,7 @@
 module A = MyArray
 
+let print_s s = Caml.print_endline @@ Base.Sexp.to_string_hum s
+
 (* Vantage-point tree implementation
    Cf. "Data structures and algorithms for nearest neighbor search
    in general metric spaces" by Peter N. Yianilos for details.
@@ -25,16 +27,16 @@ module Make (P : Point) = struct
 
   type node = {
     vp : P.t;
-    lb_low : float;
-    lb_high : float;
-    middle : float;
-    rb_low : float;
-    rb_high : float;
+    lb_low : Base.float;
+    lb_high : Base.float;
+    middle : Base.float;
+    rb_low : Base.float;
+    rb_high : Base.float;
     left : t;
     right : t;
   }
 
-  and t = Empty | Node of node
+  and t = Empty | Node of node [@@deriving sexp]
 
   let new_node vp lb_low lb_high middle rb_low rb_high left right =
     Node { vp; lb_low; lb_high; middle; rb_low; rb_high; left; right }
@@ -292,39 +294,52 @@ module Make (P : Point) = struct
 
   let mem query tree =
     try
-      let _ = find query tree in
+      let (_ : _) = find query tree in
       true
     with Not_found -> false
 
-  let rec traverse base score t t' =
-    match (t, t') with
-    | Node t, Node t' when Float.(score t t' <> infinity) ->
-        base t.vp t'.vp;
-        traverse base score t.left t'.left;
-        traverse base score t.left t'.right;
-        traverse base score t.right t'.left;
-        traverse base score t.right t'.right
+  open Base
+
+  let children n =
+    match (n.left, n.right) with
+    | (Node _ as l), (Node _ as r) -> [ l; r ]
+    | Empty, (Node _ as n) | (Node _ as n), Empty -> [ n ]
+    | Empty, Empty -> []
+
+  let rec traverse base score query refr =
+    match (query, refr) with
+    | Node qn, Node rn when Float.(score qn rn <> infinity) ->
+        base qn.vp rn.vp;
+
+        let qc = children qn and rc = children rn in
+        if (not (List.is_empty qc)) && not (List.is_empty rc) then
+          List.iter qc ~f:(fun qcn ->
+              List.iter rc ~f:(fun rcn -> traverse base score qcn rcn))
+        else if not (List.is_empty qc) then
+          List.iter qc ~f:(fun qcn -> traverse base score qcn refr)
+        else if not (List.is_empty rc) then
+          List.iter rc ~f:(fun rcn -> traverse base score query rcn)
     | _ -> ()
 
-  let range lower upper t t' =
-    let open Base in
+  let range lower upper t t' ~f ~init =
     let module P2 = struct
       type t = P.t * P.t [@@deriving compare, hash, sexp]
     end in
-    let neighbors = Hashtbl.create (module P)
-    and called = Hash_set.create (module P2) in
+    let neighbors = ref init and called = Hash_set.create (module P2) in
 
     let base p p' =
       let d = P.dist p p' in
+      print_s [%message "examined" (p : P.t) (p' : P.t)];
       if Float.(lower <= d && d <= upper) && not (Hash_set.mem called (p, p'))
-      then
-        Hashtbl.update neighbors
-          ~f:(function None -> [ p' ] | Some ps -> p' :: ps)
-          p
+      then neighbors := f !neighbors p p'
     in
     let score n n' =
-      let dmin = P.dist n.vp n'.vp -. n.lb_high -. n'.lb_high in
-      if Float.(lower <= dmin && dmin <= upper) then dmin else Float.infinity
+      let _dmin =
+        Float.max 0. @@ (P.dist n.vp n'.vp -. n.lb_high -. n'.lb_high)
+      in
+      1.0
+      (* if Float.(lower <= dmin && dmin <= upper) then dmin else Float.infinity *)
     in
-    traverse base score t t'
+    traverse base score t t';
+    !neighbors
 end
