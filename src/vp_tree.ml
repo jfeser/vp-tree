@@ -64,7 +64,7 @@ module Make (P : Point) = struct
   (* x = y *)
 
   let median (xs : float array) : float =
-    A.sort float_compare xs;
+    Base.Array.sort ~compare:float_compare xs;
     let n = A.length xs in
     if n mod 2 = 1 then xs.(n / 2) else 0.5 *. (xs.(n / 2) +. xs.((n / 2) - 1))
 
