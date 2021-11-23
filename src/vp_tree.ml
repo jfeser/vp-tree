@@ -59,13 +59,9 @@ module Make (P : Point) = struct
 
   let square (x : float) : float = x *. x
 
-  let float_compare (x : float) (y : float) : int =
-    if x < y then -1 else if x > y then 1 else 0
-  (* x = y *)
-
   let median xs =
     let n = A.length xs in
-    Quickselect.select ~compare:float_compare (Array.copy xs) 0 (n - 1) (n / 2)
+    Quickselect.select (Array.copy xs) 0 (n - 1) (n / 2)
 
   let variance (mu : float) (xs : float array) : float =
     A.fold_left (fun acc x -> acc +. square (x -. mu)) 0.0 xs

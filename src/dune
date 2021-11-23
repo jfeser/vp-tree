@@ -1,9 +1,10 @@
 (library
  (name vpt)
  (public_name vpt)
- (modules vp_tree myArray)
+ (modules vp_tree myArray quickselect)
  (libraries base)
- (preprocess (pps ppx_hash ppx_sexp_conv ppx_compare)))
+ (inline_tests)
+ (preprocess (pps ppx_hash ppx_sexp_conv ppx_compare ppx_inline_test ppx_assert)))
 
 (executable
  (name test)
