@@ -1,7 +1,7 @@
 (** Functorial interface. *)
 
 module type Point = sig
-  type t
+  type t [@@deriving compare, hash, sexp]
   (** A point. *)
 
   val dist : t -> t -> float
@@ -71,4 +71,6 @@ module Make : functor (P : Point) -> sig
       Should always be true.
       If invariant doesn't hold, then this library has a bug
       (or your distance function is not a proper metric). *)
+
+  val range : float -> float -> t -> t -> unit
 end

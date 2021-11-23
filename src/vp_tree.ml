@@ -9,7 +9,7 @@ module A = MyArray
 (* Functorial interface *)
 
 module type Point = sig
-  type t
+  type t [@@deriving compare, hash, sexp]
 
   (* dist _must_ be a metric *)
   val dist : t -> t -> float
@@ -304,4 +304,36 @@ functor
         let _ = find query tree in
         true
       with Not_found -> false
+
+    let rec traverse base score t t' =
+      match (t, t') with
+      | Node t, Node t' when Float.(score t t' <> infinity) ->
+          base t.vp t'.vp;
+          traverse base score t.left t'.left;
+          traverse base score t.left t'.right;
+          traverse base score t.right t'.left;
+          traverse base score t.right t'.right
+      | _ -> ()
+
+    let range lower upper t t' =
+      let open Base in
+      let module P2 = struct
+        type t = P.t * P.t [@@deriving compare, hash, sexp]
+      end in
+      let neighbors = Hashtbl.create (module P)
+      and called = Hash_set.create (module P2) in
+
+      let base p p' =
+        let d = P.dist p p' in
+        if Float.(lower <= d && d <= upper) && not (Hash_set.mem called (p, p'))
+        then
+          Hashtbl.update neighbors
+            ~f:(function None -> [ p' ] | Some ps -> p' :: ps)
+            p
+      in
+      let score n n' =
+        let dmin = P.dist n.vp n'.vp -. n.lb_high -. n'.lb_high in
+        if Float.(lower <= dmin && dmin <= upper) then dmin else Float.infinity
+      in
+      traverse base score t t'
   end

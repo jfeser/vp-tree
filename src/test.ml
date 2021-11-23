@@ -10,7 +10,9 @@ let dist_2D (x0, y0) (x1, y1) = sqrt (square (x0 -. x1) +. square (y0 -. y1))
 let fabs x = if x > 0.0 then x else -.x
 
 module Point_2D = struct
-  type t = float * float
+  open Base
+
+  type t = float * float [@@deriving compare, hash, sexp]
 
   let dist = dist_2D
 end
