@@ -17,7 +17,7 @@ module Point_2D = struct
   let dist = dist_2D
 end
 
-module VPT = Vpt.Vp_tree.Make (Point_2D)
+module VPT = Vpt.Make (Point_2D)
 
 let to_string_2D (x, y) = sprintf "%.3f %.3f" x y
 
