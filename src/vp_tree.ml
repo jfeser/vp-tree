@@ -1,5 +1,4 @@
 open Base
-module A = MyArray
 
 let ( <. ) = Float.( < )
 
@@ -10,6 +9,37 @@ let ( >. ) = Float.( > )
 let ( >=. ) = Float.( >= )
 
 let ( =. ) = Float.( = )
+
+module A = struct
+  include Array
+
+  (* smaller array, without elt at index 'i' *)
+  let remove i a =
+    let n = length a in
+    assert (i >= 0 && i < n);
+    Array.init (n - 1) ~f:(fun i' -> if i' < i then a.(i') else a.(i' + 1))
+
+  (* <=> BatArray.min_max with default value in case of empty array *)
+  let min_max_def a def =
+    let n = length a in
+    if n = 0 then def
+    else
+      let mini = ref (unsafe_get a 0) in
+      let maxi = ref (unsafe_get a 0) in
+      for i = 1 to n - 1 do
+        let x = unsafe_get a i in
+        mini := Float.min x !mini;
+        maxi := Float.max x !maxi
+      done;
+      (!mini, !maxi)
+
+  (* get one bootstrap sample of 'size' using sampling with replacement *)
+  let bootstrap_sample rng size a =
+    let n = length a in
+    assert (n > 0);
+    assert (size < n);
+    init size ~f:(fun _ -> unsafe_get a (Base.Random.State.int rng n))
+end
 
 let print_s s = Caml.print_endline @@ Base.Sexp.to_string_hum s
 
@@ -67,16 +97,16 @@ module Make (P : Point) = struct
 
   let median xs =
     let n = A.length xs in
-    Quickselect.select (Array.copy xs) 0 (n - 1) (n / 2)
+    Quickselect.select (A.copy xs) 0 (n - 1) (n / 2)
 
   let variance (mu : float) (xs : float array) : float =
-    A.fold_left (fun acc x -> acc +. square (x -. mu)) 0.0 xs
+    A.fold ~f:(fun acc x -> acc +. square (x -. mu)) ~init:0.0 xs
 
   (* compute distance of point at index 'q_i' to all other points *)
   let distances (q_i : int) (points : P.t array) : float array =
     let n = A.length points in
     assert (n > 1);
-    let res = A.make (n - 1) 0.0 in
+    let res = A.create ~len:(n - 1) 0.0 in
     let j = ref 0 in
     let q = points.(q_i) in
     for i = 0 to n - 1 do
@@ -118,9 +148,9 @@ module Make (P : Point) = struct
       let curr_mu = ref 0.0 in
       let curr_spread = ref 0.0 in
       A.iteri
-        (fun i p_i ->
+        ~f:(fun i p_i ->
           let sample = A.bootstrap_sample rng sample_size points in
-          let dists = A.map (P.dist p_i) sample in
+          let dists = A.map ~f:(P.dist p_i) sample in
           let mu = median dists in
           let spread = variance mu dists in
           if spread >. !curr_spread then (
@@ -150,10 +180,10 @@ module Make (P : Point) = struct
     else if n = 1 then new_node points.(0) 0. 0. 0. 0. 0. Empty Empty
     else
       let vp, mu, others = select_vp points in
-      let dists = A.map (fun p -> (P.dist vp p, p)) others in
-      let lefties, righties = A.partition (fun (d, _p) -> d <. mu) dists in
-      let ldists, lpoints = A.split lefties in
-      let rdists, rpoints = A.split righties in
+      let dists = A.map ~f:(fun p -> (P.dist vp p, p)) others in
+      let lefties, righties = A.partition_tf dists ~f:(fun (d, _) -> d <. mu) in
+      let ldists, lpoints = A.unzip lefties in
+      let rdists, rpoints = A.unzip righties in
       let lb_low, lb_high = A.min_max_def ldists (0., 0.) in
       let rb_low, rb_high = A.min_max_def rdists (0., 0.) in
       let middle = (lb_high +. rb_low) *. 0.5 in
