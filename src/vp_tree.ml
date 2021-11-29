@@ -70,7 +70,7 @@ module Make (P : Point) = struct
     right : t;
   }
 
-  and t = Empty | Node of node [@@deriving sexp]
+  and t = Empty | Leaf of P.t array | Node of node [@@deriving sexp]
 
   let new_node vp lb_low lb_high middle rb_low rb_high left right =
     Node { vp; lb_low; lb_high; middle; rb_low; rb_high; left; right }
@@ -174,9 +174,10 @@ module Make (P : Point) = struct
     let mu = median dists in
     (points.(vp), mu, A.remove vp points)
 
-  let rec create' select_vp points =
+  let rec create' select_vp leaf_size points =
     let n = A.length points in
     if n = 0 then Empty
+    else if n <= leaf_size then Leaf points
     else if n = 1 then new_node points.(0) 0. 0. 0. 0. 0. Empty Empty
     else
       let vp, mu, others = select_vp points in
@@ -186,185 +187,250 @@ module Make (P : Point) = struct
       let rdists, rpoints = A.unzip righties in
       let lb_low, lb_high = A.min_max_def ldists (0., 0.) in
       let rb_low, rb_high = A.min_max_def rdists (0., 0.) in
-      let middle = (lb_high +. rb_low) *. 0.5 in
-      new_node vp lb_low lb_high middle rb_low rb_high
-        (create' select_vp lpoints)
-        (create' select_vp rpoints)
+      new_node vp lb_low lb_high mu rb_low rb_high
+        (create' select_vp leaf_size lpoints)
+        (create' select_vp leaf_size rpoints)
 
-  let create quality points =
+  (** Insert internal vantage points into leaves *)
+  let fixup tree =
+    let rec fixup points = function
+      | Empty -> Leaf (Array.of_list points)
+      | Leaf ps -> Leaf (Array.append ps @@ Array.of_list points)
+      | Node n ->
+          let points =
+            List.map (n.vp :: points) ~f:(fun p -> (P.dist n.vp p, p))
+          in
+          let left, right =
+            List.partition_tf points ~f:(fun (d, _) -> d <. n.middle)
+          in
+          let ldists, lpoints = List.unzip left in
+          let rdists, rpoints = List.unzip right in
+          let lb_low, lb_high =
+            List.fold ldists ~init:(n.lb_low, n.lb_high) ~f:(fun (l, h) d ->
+                (Float.min l d, Float.max h d))
+          in
+          let rb_low, rb_high =
+            List.fold rdists ~init:(n.rb_low, n.rb_high) ~f:(fun (l, h) d ->
+                (Float.min l d, Float.max h d))
+          in
+          Node
+            {
+              n with
+              lb_low;
+              lb_high;
+              rb_low;
+              rb_high;
+              left = fixup lpoints n.left;
+              right = fixup rpoints n.right;
+            }
+    in
+    fixup [] tree
+
+  let create ?(leaf_size = 32) ?(state = Random.State.default) quality points =
+    assert (leaf_size >= 0);
     let select_vp =
       match quality with
       | `Optimal -> select_best_vp
-      | `Good ssize -> select_good_vp (Random.State.make_self_init ()) ssize
-      | `Random -> select_rand_vp (Random.State.make_self_init ())
+      | `Good ssize -> select_good_vp state ssize
+      | `Random -> select_rand_vp state
     in
-    create' select_vp (A.of_list points)
+    create' select_vp leaf_size (A.of_list points) |> fixup
 
-  let rec find_nearest acc query tree =
-    match tree with
-    | Empty -> acc
-    | Node { vp; lb_low; lb_high; middle; rb_low; rb_high; left; right } -> (
-        let x = P.dist vp query in
-        if x =. 0.0 then Some (x, vp) (* can't get nearer than that *)
-        else
-          let tau, acc' =
-            match acc with
-            | None -> (x, Some (x, vp))
-            | Some (tau, best) ->
-                if x <. tau then (x, Some (x, vp)) else (tau, Some (tau, best))
-          in
-          let il = new_open_itv (lb_low -. tau) (lb_high +. tau) in
-          let ir = new_open_itv (rb_low -. tau) (rb_high +. tau) in
-          let in_il = in_open_itv x il in
-          let in_ir = in_open_itv x ir in
-          if x <. middle then
-            match (in_il, in_ir) with
-            | false, false -> acc'
-            | true, false -> find_nearest acc' query left
-            | false, true -> find_nearest acc' query right
-            | true, true -> (
-                match find_nearest acc' query left with
-                | None -> find_nearest acc' query right
-                | Some (tau, best) -> (
-                    match find_nearest acc' query right with
-                    | None -> Some (tau, best)
-                    | Some (tau', best') ->
-                        if tau' <. tau then Some (tau', best')
-                        else Some (tau, best)))
-          else
-            (* x >= middle *)
-            match (in_ir, in_il) with
-            | false, false -> acc'
-            | true, false -> find_nearest acc' query right
-            | false, true -> find_nearest acc' query left
-            | true, true -> (
-                match find_nearest acc' query right with
-                | None -> find_nearest acc' query left
-                | Some (tau, best) -> (
-                    match find_nearest acc' query left with
-                    | None -> Some (tau, best)
-                    | Some (tau', best') ->
-                        if tau' <. tau then Some (tau', best')
-                        else Some (tau, best))))
+  (* let rec find_nearest acc query tree = *)
+  (*   match tree with *)
+  (*   | Empty -> acc *)
+  (*   | Node { vp; lb_low; lb_high; middle; rb_low; rb_high; left; right } -> ( *)
+  (*       let x = P.dist vp query in *)
+  (*       if x =. 0.0 then Some (x, vp) (\* can't get nearer than that *\) *)
+  (*       else *)
+  (*         let tau, acc' = *)
+  (*           match acc with *)
+  (*           | None -> (x, Some (x, vp)) *)
+  (*           | Some (tau, best) -> *)
+  (*               if x <. tau then (x, Some (x, vp)) else (tau, Some (tau, best)) *)
+  (*         in *)
+  (*         let il = new_open_itv (lb_low -. tau) (lb_high +. tau) in *)
+  (*         let ir = new_open_itv (rb_low -. tau) (rb_high +. tau) in *)
+  (*         let in_il = in_open_itv x il in *)
+  (*         let in_ir = in_open_itv x ir in *)
+  (*         if x <. middle then *)
+  (*           match (in_il, in_ir) with *)
+  (*           | false, false -> acc' *)
+  (*           | true, false -> find_nearest acc' query left *)
+  (*           | false, true -> find_nearest acc' query right *)
+  (*           | true, true -> ( *)
+  (*               match find_nearest acc' query left with *)
+  (*               | None -> find_nearest acc' query right *)
+  (*               | Some (tau, best) -> ( *)
+  (*                   match find_nearest acc' query right with *)
+  (*                   | None -> Some (tau, best) *)
+  (*                   | Some (tau', best') -> *)
+  (*                       if tau' <. tau then Some (tau', best') *)
+  (*                       else Some (tau, best))) *)
+  (*         else *)
+  (*           (\* x >= middle *\) *)
+  (*           match (in_ir, in_il) with *)
+  (*           | false, false -> acc' *)
+  (*           | true, false -> find_nearest acc' query right *)
+  (*           | false, true -> find_nearest acc' query left *)
+  (*           | true, true -> ( *)
+  (*               match find_nearest acc' query right with *)
+  (*               | None -> find_nearest acc' query left *)
+  (*               | Some (tau, best) -> ( *)
+  (*                   match find_nearest acc' query left with *)
+  (*                   | None -> Some (tau, best) *)
+  (*                   | Some (tau', best') -> *)
+  (*                       if tau' <. tau then Some (tau', best') *)
+  (*                       else Some (tau, best)))) *)
 
-  let nearest_neighbor query tree =
-    Option.value_exn (find_nearest None query tree)
+  (* let nearest_neighbor query tree = *)
+  (*   Option.value_exn (find_nearest None query tree) *)
 
-  let rec to_list_loop acc = function
-    | Empty -> acc
+  let rec iter ~f = function
+    | Empty -> ()
+    | Leaf ps -> Array.iter ~f ps
     | Node n ->
-        let acc' = to_list_loop acc n.right in
-        to_list_loop (n.vp :: acc') n.left
+        iter ~f n.left;
+        iter ~f n.right
 
-  let to_list tree = to_list_loop [] tree
+  let to_iter tree f = iter ~f tree
 
-  let neighbors query tol tree =
-    let rec loop acc = function
-      | Empty -> acc
-      | Node { vp; lb_low; lb_high; rb_low; rb_high; left; right; _ } ->
-          (* should we include vp? *)
-          let d = P.dist vp query in
-          let acc' = if d <=. tol then vp :: acc else acc in
-          let lbound = Float.max 0.0 (d -. tol) in
-          let rbound = d +. tol in
-          let itv = new_open_itv lbound rbound in
-          (* should we inspect the left? *)
-          let lmatches =
-            let itv_left = new_open_itv lb_low lb_high in
-            if itv_overlap itv itv_left then
-              (* further calls to P.dist needed? *)
-              if d +. lb_high <=. tol then
-                (* all descendants are included *)
-                to_list_loop acc' left
-              else loop acc' left
-            else acc'
-          in
-          (* should we inspect the right? *)
-          let itv_right = new_open_itv rb_low rb_high in
-          if itv_overlap itv itv_right then
-            (* further calls to P.dist needed? *)
-            if d +. rb_high <=. tol then to_list_loop lmatches right
-            else loop lmatches right
-          else lmatches
-    in
-    loop [] tree
+  (* let rec to_list_loop acc = function *)
+  (*   | Empty -> acc *)
+  (*   | Node n -> *)
+  (*       let acc' = to_list_loop acc n.right in *)
+  (*       to_list_loop (n.vp :: acc') n.left *)
 
-  let is_empty = function Empty -> true | Node _ -> false
+  (* let to_list tree = to_list_loop [] tree *)
 
-  let root = function Empty -> None | Node { vp; _ } -> Some vp
+  (* let neighbors query tol tree = *)
+  (*   let rec loop acc = function *)
+  (*     | Empty -> acc *)
+  (*     | Node { vp; lb_low; lb_high; rb_low; rb_high; left; right; _ } -> *)
+  (*         (\* should we include vp? *\) *)
+  (*         let d = P.dist vp query in *)
+  (*         let acc' = if d <=. tol then vp :: acc else acc in *)
+  (*         let lbound = Float.max 0.0 (d -. tol) in *)
+  (*         let rbound = d +. tol in *)
+  (*         let itv = new_open_itv lbound rbound in *)
+  (*         (\* should we inspect the left? *\) *)
+  (*         let lmatches = *)
+  (*           let itv_left = new_open_itv lb_low lb_high in *)
+  (*           if itv_overlap itv itv_left then *)
+  (*             (\* further calls to P.dist needed? *\) *)
+  (*             if d +. lb_high <=. tol then *)
+  (*               (\* all descendants are included *\) *)
+  (*               to_list_loop acc' left *)
+  (*             else loop acc' left *)
+  (*           else acc' *)
+  (*         in *)
+  (*         (\* should we inspect the right? *\) *)
+  (*         let itv_right = new_open_itv rb_low rb_high in *)
+  (*         if itv_overlap itv itv_right then *)
+  (*           (\* further calls to P.dist needed? *\) *)
+  (*           if d +. rb_high <=. tol then to_list_loop lmatches right *)
+  (*           else loop lmatches right *)
+  (*         else lmatches *)
+  (*   in *)
+  (*   loop [] tree *)
+
+  (* let is_empty = function Empty -> true | Node _ -> false *)
+
+  (* let root = function Empty -> None | Node { vp; _ } -> Some vp *)
 
   (* test if the tree invariant holds.
      If it doesn't, then we are in trouble... *)
   let rec check = function
-    | Empty -> true
+    | Empty | Leaf _ -> true
     | Node { vp; lb_low; lb_high; middle; rb_low; rb_high; left; right } ->
-        let bounds_OK =
-          0.0 <=. lb_low && lb_low <=. lb_high
-          && (lb_high <. middle || 0.0 =. middle)
-          && middle <=. rb_low && rb_low <=. rb_high
-        in
-        bounds_OK
-        && List.for_all ~f:(fun p -> P.dist vp p <. middle) (to_list left)
-        && List.for_all ~f:(fun p -> P.dist vp p >=. middle) (to_list right)
+        0.0 <=. lb_low && lb_low <=. lb_high
+        && (lb_high <. middle || 0.0 =. middle)
+        && middle <=. rb_low && rb_low <=. rb_high
+        && Iter.for_all (fun p -> P.dist vp p <. middle) (to_iter left)
+        && Iter.for_all (fun p -> P.dist vp p >=. middle) (to_iter right)
         && check left && check right
 
   exception Found of P.t
 
-  let find query tree =
-    let rec loop = function
-      | Empty -> ()
-      | Node { vp; middle; left; right; _ } ->
-          let d = P.dist vp query in
-          if d =. 0.0 then raise (Found vp)
-          else if d <. middle then loop left
-          else loop right
-    in
-    try
-      loop tree;
-      None
-    with Found p -> Some p
+  (* let find query tree = *)
+  (*   let rec loop = function *)
+  (*     | Empty -> () *)
+  (*     | Node { vp; middle; left; right; _ } -> *)
+  (*         let d = P.dist vp query in *)
+  (*         if d =. 0.0 then raise (Found vp) *)
+  (*         else if d <. middle then loop left *)
+  (*         else loop right *)
+  (*   in *)
+  (*   try *)
+  (*     loop tree; *)
+  (*     None *)
+  (*   with Found p -> Some p *)
 
-  let mem query tree = Option.is_some @@ find query tree
+  (* let mem query tree = Option.is_some @@ find query tree *)
 
-  let children n =
-    match (n.left, n.right) with
-    | (Node _ as l), (Node _ as r) -> [ l; r ]
-    | Empty, (Node _ as n) | (Node _ as n), Empty -> [ n ]
-    | Empty, Empty -> []
+  (* let children n = *)
+  (*   match (n.left, n.right) with *)
+  (*   |      *)
+  (*   | (Node _ as l), (Node _ as r) -> *)
+  (*           [ l; r ] *)
+  (*   | Empty, (Node _ as n) | (Node _ as n), Empty -> [ n ] *)
+  (*   | (Empty | Leaf _), (Empty | Leaf _) -> [] *)
 
-  let rec traverse base score query refr =
-    match (query, refr) with
-    | Node qn, Node rn when Float.(score qn rn <> infinity) ->
-        base qn.vp rn.vp;
+  (* let rec traverse base score query refr = *)
+  (*   match (query, refr) with *)
+  (*   | Node qn, Node rn when Float.(score qn rn <> infinity) -> *)
+  (*       base qn.vp rn.vp; *)
 
-        let qc = children qn and rc = children rn in
-        if (not (List.is_empty qc)) && not (List.is_empty rc) then
-          List.iter qc ~f:(fun qcn ->
-              List.iter rc ~f:(fun rcn -> traverse base score qcn rcn))
-        else if not (List.is_empty qc) then
-          List.iter qc ~f:(fun qcn -> traverse base score qcn refr)
-        else if not (List.is_empty rc) then
-          List.iter rc ~f:(fun rcn -> traverse base score query rcn)
-    | _ -> ()
+  (*       let qc = children qn and rc = children rn in *)
+  (*       if (not (List.is_empty qc)) && not (List.is_empty rc) then *)
+  (*         List.iter qc ~f:(fun qcn -> *)
+  (*             List.iter rc ~f:(fun rcn -> traverse base score qcn rcn)) *)
+  (*       else if not (List.is_empty qc) then *)
+  (*         List.iter qc ~f:(fun qcn -> traverse base score qcn refr) *)
+  (*       else if not (List.is_empty rc) then *)
+  (*         List.iter rc ~f:(fun rcn -> traverse base score query rcn) *)
+  (*   | _ -> () *)
 
-  let range lower upper t t' ~f ~init =
-    let module P2 = struct
-      type t = P.t * P.t [@@deriving compare, hash, sexp]
-    end in
-    let neighbors = ref init and called = Hash_set.create (module P2) in
+  (* let range lower upper t t' ~f ~init = *)
+  (*   let module P2 = struct *)
+  (*     type t = P.t * P.t [@@deriving compare, hash, sexp] *)
+  (*   end in *)
+  (*   let neighbors = ref init and called = Hash_set.create (module P2) in *)
 
-    let base p p' =
-      let d = P.dist p p' in
-      if (lower <=. d && d <=. upper) && not (Hash_set.mem called (p, p')) then
-        neighbors := f !neighbors p p'
-    in
-    let score n n' =
-      let _dmin =
-        Float.max 0. @@ (P.dist n.vp n'.vp -. n.lb_high -. n'.lb_high)
-      in
-      1.0
-      (* if Float.(lower <=. dmin && dmin <=. upper) then dmin else Float.infinity *)
-    in
-    traverse base score t t';
-    !neighbors
+  (*   let base p p' = *)
+  (*     let d = P.dist p p' in *)
+  (*     if (lower <=. d && d <=. upper) && not (Hash_set.mem called (p, p')) then *)
+  (*       neighbors := f !neighbors p p' *)
+  (*   in *)
+  (*   let score n n' = *)
+  (*     let _dmin = *)
+  (*       Float.max 0. @@ (P.dist n.vp n'.vp -. n.lb_high -. n'.lb_high) *)
+  (*     in *)
+  (*     1.0 *)
+  (*     (\* if Float.(lower <=. dmin && dmin <=. upper) then dmin else Float.infinity *\) *)
+  (*   in *)
+  (*   traverse base score t t'; *)
+  (*   !neighbors *)
+
+  let rec range lower upper t t' f =
+    match (t, t') with
+    | Empty, _ | _, Empty -> ()
+    | Node n, Node n' ->
+        let d = P.dist n.vp n'.vp in
+        if d -. n.lb_high -. n'.lb_high <=. upper -. lower then
+          range lower upper n.left n'.left f;
+        if d -. n.lb_high -. n'.rb_high <. upper -. lower then
+          range lower upper n.left n'.right f;
+        if d -. n.rb_high -. n'.lb_high <. upper -. lower then
+          range lower upper n.right n'.left f;
+        if d -. n.rb_high -. n'.rb_high <. upper -. lower then
+          range lower upper n.right n'.right f
+    | (Leaf _ as t), Node n | Node n, (Leaf _ as t) ->
+        range lower upper n.left t f;
+        range lower upper n.right t f
+    | Leaf l, Leaf l' ->
+        Array.iter l ~f:(fun p ->
+            Array.iter l' ~f:(fun p' ->
+                let d = P.dist p p' in
+                if lower <=. d && d <=. upper then f (p, p')))
 end
