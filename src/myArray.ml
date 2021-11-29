@@ -61,7 +61,7 @@ let bootstrap_sample rng size a =
   assert (size < n);
   let res = make size (unsafe_get a 0) in
   for i = 0 to size - 1 do
-    let rand = Random.State.int rng n in
+    let rand = Base.Random.State.int rng n in
     unsafe_set res i (unsafe_get a rand)
   done;
   res

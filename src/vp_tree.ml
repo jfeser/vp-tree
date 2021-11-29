@@ -1,4 +1,15 @@
+open Base
 module A = MyArray
+
+let ( <. ) = Float.( < )
+
+let ( <=. ) = Float.( <= )
+
+let ( >. ) = Float.( > )
+
+let ( >=. ) = Float.( >= )
+
+let ( =. ) = Float.( = )
 
 let print_s s = Caml.print_endline @@ Base.Sexp.to_string_hum s
 
@@ -37,10 +48,10 @@ module Make (P : Point) = struct
   type open_itv = { lbound : float; rbound : float }
 
   let new_open_itv lbound rbound =
-    assert (lbound <= rbound);
+    assert (lbound <=. rbound);
     { lbound; rbound }
 
-  let in_open_itv x { lbound; rbound } = x > lbound && x < rbound
+  let in_open_itv x { lbound; rbound } = x >. lbound && x <. rbound
 
   let itv_dont_overlap left right =
     let a = left.lbound in
@@ -48,7 +59,7 @@ module Make (P : Point) = struct
     let c = right.lbound in
     let d = right.rbound in
     (* [a..b] [c..d] OR [c..d] [a..b] *)
-    b < c || d < a
+    b <. c || d <. a
 
   let itv_overlap left right = not (itv_dont_overlap left right)
 
@@ -71,7 +82,7 @@ module Make (P : Point) = struct
     for i = 0 to n - 1 do
       if i <> q_i then (
         res.(!j) <- P.dist q points.(i);
-        incr j)
+        Int.incr j)
     done;
     res
 
@@ -90,7 +101,7 @@ module Make (P : Point) = struct
         let dists = distances !curr_vp points in
         let mu = median dists in
         let spread = variance mu dists in
-        if spread > !curr_spread then (
+        if spread >. !curr_spread then (
           curr_vp := i;
           curr_mu := mu;
           curr_spread := spread)
@@ -112,7 +123,7 @@ module Make (P : Point) = struct
           let dists = A.map (P.dist p_i) sample in
           let mu = median dists in
           let spread = variance mu dists in
-          if spread > !curr_spread then (
+          if spread >. !curr_spread then (
             curr_vp := i;
             curr_mu := mu;
             curr_spread := spread))
@@ -140,7 +151,7 @@ module Make (P : Point) = struct
     else
       let vp, mu, others = select_vp points in
       let dists = A.map (fun p -> (P.dist vp p, p)) others in
-      let lefties, righties = A.partition (fun (d, _p) -> d < mu) dists in
+      let lefties, righties = A.partition (fun (d, _p) -> d <. mu) dists in
       let ldists, lpoints = A.split lefties in
       let rdists, rpoints = A.split righties in
       let lb_low, lb_high = A.min_max_def ldists (0., 0.) in
@@ -164,19 +175,19 @@ module Make (P : Point) = struct
     | Empty -> acc
     | Node { vp; lb_low; lb_high; middle; rb_low; rb_high; left; right } -> (
         let x = P.dist vp query in
-        if x = 0.0 then Some (x, vp) (* can't get nearer than that *)
+        if x =. 0.0 then Some (x, vp) (* can't get nearer than that *)
         else
           let tau, acc' =
             match acc with
             | None -> (x, Some (x, vp))
             | Some (tau, best) ->
-                if x < tau then (x, Some (x, vp)) else (tau, Some (tau, best))
+                if x <. tau then (x, Some (x, vp)) else (tau, Some (tau, best))
           in
           let il = new_open_itv (lb_low -. tau) (lb_high +. tau) in
           let ir = new_open_itv (rb_low -. tau) (rb_high +. tau) in
           let in_il = in_open_itv x il in
           let in_ir = in_open_itv x ir in
-          if x < middle then
+          if x <. middle then
             match (in_il, in_ir) with
             | false, false -> acc'
             | true, false -> find_nearest acc' query left
@@ -188,7 +199,7 @@ module Make (P : Point) = struct
                     match find_nearest acc' query right with
                     | None -> Some (tau, best)
                     | Some (tau', best') ->
-                        if tau' < tau then Some (tau', best')
+                        if tau' <. tau then Some (tau', best')
                         else Some (tau, best)))
           else
             (* x >= middle *)
@@ -203,13 +214,11 @@ module Make (P : Point) = struct
                     match find_nearest acc' query left with
                     | None -> Some (tau, best)
                     | Some (tau', best') ->
-                        if tau' < tau then Some (tau', best')
+                        if tau' <. tau then Some (tau', best')
                         else Some (tau, best))))
 
   let nearest_neighbor query tree =
-    match find_nearest None query tree with
-    | Some x -> x
-    | None -> raise Not_found
+    Option.value_exn (find_nearest None query tree)
 
   let rec to_list_loop acc = function
     | Empty -> acc
@@ -225,8 +234,8 @@ module Make (P : Point) = struct
       | Node { vp; lb_low; lb_high; rb_low; rb_high; left; right; _ } ->
           (* should we include vp? *)
           let d = P.dist vp query in
-          let acc' = if d <= tol then vp :: acc else acc in
-          let lbound = max 0.0 (d -. tol) in
+          let acc' = if d <=. tol then vp :: acc else acc in
+          let lbound = Float.max 0.0 (d -. tol) in
           let rbound = d +. tol in
           let itv = new_open_itv lbound rbound in
           (* should we inspect the left? *)
@@ -234,7 +243,7 @@ module Make (P : Point) = struct
             let itv_left = new_open_itv lb_low lb_high in
             if itv_overlap itv itv_left then
               (* further calls to P.dist needed? *)
-              if d +. lb_high <= tol then
+              if d +. lb_high <=. tol then
                 (* all descendants are included *)
                 to_list_loop acc' left
               else loop acc' left
@@ -244,7 +253,7 @@ module Make (P : Point) = struct
           let itv_right = new_open_itv rb_low rb_high in
           if itv_overlap itv itv_right then
             (* further calls to P.dist needed? *)
-            if d +. rb_high <= tol then to_list_loop lmatches right
+            if d +. rb_high <=. tol then to_list_loop lmatches right
             else loop lmatches right
           else lmatches
     in
@@ -252,7 +261,7 @@ module Make (P : Point) = struct
 
   let is_empty = function Empty -> true | Node _ -> false
 
-  let root = function Empty -> raise Not_found | Node { vp; _ } -> vp
+  let root = function Empty -> None | Node { vp; _ } -> Some vp
 
   (* test if the tree invariant holds.
      If it doesn't, then we are in trouble... *)
@@ -260,13 +269,13 @@ module Make (P : Point) = struct
     | Empty -> true
     | Node { vp; lb_low; lb_high; middle; rb_low; rb_high; left; right } ->
         let bounds_OK =
-          0.0 <= lb_low && lb_low <= lb_high
-          && (lb_high < middle || 0.0 = middle)
-          && middle <= rb_low && rb_low <= rb_high
+          0.0 <=. lb_low && lb_low <=. lb_high
+          && (lb_high <. middle || 0.0 =. middle)
+          && middle <=. rb_low && rb_low <=. rb_high
         in
         bounds_OK
-        && List.for_all (fun p -> P.dist vp p < middle) (to_list left)
-        && List.for_all (fun p -> P.dist vp p >= middle) (to_list right)
+        && List.for_all ~f:(fun p -> P.dist vp p <. middle) (to_list left)
+        && List.for_all ~f:(fun p -> P.dist vp p >=. middle) (to_list right)
         && check left && check right
 
   exception Found of P.t
@@ -276,22 +285,16 @@ module Make (P : Point) = struct
       | Empty -> ()
       | Node { vp; middle; left; right; _ } ->
           let d = P.dist vp query in
-          if d = 0.0 then raise (Found vp)
-          else if d < middle then loop left
+          if d =. 0.0 then raise (Found vp)
+          else if d <. middle then loop left
           else loop right
     in
     try
       loop tree;
-      raise Not_found
-    with Found p -> p
+      None
+    with Found p -> Some p
 
-  let mem query tree =
-    try
-      let (_ : _) = find query tree in
-      true
-    with Not_found -> false
-
-  open Base
+  let mem query tree = Option.is_some @@ find query tree
 
   let children n =
     match (n.left, n.right) with
@@ -322,15 +325,15 @@ module Make (P : Point) = struct
 
     let base p p' =
       let d = P.dist p p' in
-      if Float.(lower <= d && d <= upper) && not (Hash_set.mem called (p, p'))
-      then neighbors := f !neighbors p p'
+      if (lower <=. d && d <=. upper) && not (Hash_set.mem called (p, p')) then
+        neighbors := f !neighbors p p'
     in
     let score n n' =
       let _dmin =
         Float.max 0. @@ (P.dist n.vp n'.vp -. n.lb_high -. n'.lb_high)
       in
       1.0
-      (* if Float.(lower <= dmin && dmin <= upper) then dmin else Float.infinity *)
+      (* if Float.(lower <=. dmin && dmin <=. upper) then dmin else Float.infinity *)
     in
     traverse base score t t';
     !neighbors

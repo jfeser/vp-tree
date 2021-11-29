@@ -45,20 +45,18 @@ module Make (P : Point) : sig
   val is_empty : t -> bool
   (** [is_empty vpt] test if [vpt] is empty. *)
 
-  val find : P.t -> t -> P.t
+  val find : P.t -> t -> P.t option
   (** [find query tree] return the first point with distance to [query] = 0.0.
-      @raise [Not_found] if no such element exists.
-      Warning: there may be several
-      points at this distance from [p] in [vpt],
-      but a single (arbitrary) one is returned. *)
+
+      Warning: there may be several points at this distance from [p] in [vpt],
+   but a single (arbitrary) one is returned. *)
 
   val mem : P.t -> t -> bool
   (** [mem query tree] return true if [query] can be found in [tree];
       false otherwise. *)
 
-  val root : t -> P.t
-  (** [root tree] return the root point of the tree.
-      @raise [Not_found] if [tree] is empty. *)
+  val root : t -> P.t option
+  (** [root tree] return the root point of the tree. *)
 
   val check : t -> bool
   (** [check tree] test the tree invariant.
