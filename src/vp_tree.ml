@@ -18,13 +18,6 @@ module type Point = sig
 end
 
 module Make (P : Point) = struct
-  type quality =
-    | Optimal (* if you have thousands of points *)
-    | Good of int (* if you have tens to hundreds
-                     of thousands of points *)
-    | Random
-  (* if you have millions of points *)
-
   type node = {
     vp : P.t;
     lb_low : Base.float;
@@ -160,9 +153,9 @@ module Make (P : Point) = struct
   let create quality points =
     let select_vp =
       match quality with
-      | Optimal -> select_best_vp
-      | Good ssize -> select_good_vp (Random.State.make_self_init ()) ssize
-      | Random -> select_rand_vp (Random.State.make_self_init ())
+      | `Optimal -> select_best_vp
+      | `Good ssize -> select_good_vp (Random.State.make_self_init ()) ssize
+      | `Random -> select_rand_vp (Random.State.make_self_init ())
     in
     create' select_vp (A.of_list points)
 
@@ -329,7 +322,6 @@ module Make (P : Point) = struct
 
     let base p p' =
       let d = P.dist p p' in
-      print_s [%message "examined" (p : P.t) (p' : P.t)];
       if Float.(lower <= d && d <= upper) && not (Hash_set.mem called (p, p'))
       then neighbors := f !neighbors p p'
     in

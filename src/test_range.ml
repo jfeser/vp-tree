@@ -34,7 +34,7 @@ let%test_unit "range" =
 
   print_s [%message (query : P.t list) (refr : P.t list)];
 
-  let query_t = create Random query and refr_t = create Random refr in
+  let query_t = create `Random query and refr_t = create `Random refr in
   print_s [%message (query_t : t) (refr_t : t)];
 
   let expect =

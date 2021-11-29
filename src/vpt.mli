@@ -15,19 +15,13 @@ module Make (P : Point) : sig
   type t [@@deriving sexp]
   (** A vantage point tree. *)
 
-  (** Quality of the constructed tree.
+  val create : [ `Optimal | `Good of int | `Random ] -> P.t list -> t
+  (** [create quality points]
+      create a vantage point tree of given quality containing all points.
+
       Tree construction takes more time with higher quality.
       Tree query time takes less time with higher tree quality.
-      If you have 100k or more points, use a Good or Random tree. *)
-  type quality =
-    | Optimal
-    | Good of int
-    (* sample size *)
-    | Random
-
-  val create : quality -> P.t list -> t
-  (** [create quality points]
-      create a vantage point tree of given quality containing all points. *)
+      If you have 100k or more points, use a `Good or `Random tree. *)
 
   val nearest_neighbor : P.t -> t -> float * P.t
   (** [nearest_neighbor p vpt] return the distance along with the nearest
