@@ -1,4 +1,5 @@
 open Base
+open Vp_tree
 
 let print_s s = Caml.print_endline @@ Sexp.to_string_hum s
 
@@ -26,8 +27,6 @@ module P = struct
   let%test "" = Float.(dist [| 1.0 |] [| 0.0 |] = 1.0)
 end
 
-open Vp_tree.Make (P)
-
 module P2 = struct
   module T = struct
     type t = P.t * P.t [@@deriving compare, sexp]
@@ -48,8 +47,8 @@ let%test_unit "range" =
     List.init n ~f:(fun _ -> Array.init dim ~f:(fun _ -> Random.float 1.0))
   in
   let query = mk_points () and refr = mk_points () in
-  let query_t = create ~leaf_size:32 `Optimal query
-  and refr_t = create ~leaf_size:32 `Optimal refr in
+  let query_t = create P.dist ~leaf_size:32 `Optimal query
+  and refr_t = create P.dist ~leaf_size:32 `Optimal refr in
 
   let expect =
     List.fold query
@@ -63,7 +62,9 @@ let%test_unit "range" =
   (* print_s [%message (t : t) (t' : t)]; *)
   let result =
     P.n_dist := 0;
-    range 0.0 0.2 query_t refr_t |> Iter.to_list |> Set.of_list (module P2)
+    range P.dist 0.0 0.2 query_t refr_t
+    |> Iter.to_list
+    |> Set.of_list (module P2)
   in
   print_s [%message (!P.n_dist : int) (n * n : int)];
   let missing = Set.diff expect result and extra = Set.diff result expect in
@@ -86,13 +87,13 @@ let%test_unit "optimal-leaf-size" =
     if leaf_size >= 256 then
       print_s [%message (min_time : float) (best_size : int)]
     else
-      let query_t = create ~leaf_size `Random query
-      and refr_t = create ~leaf_size `Random refr in
+      let query_t = create P.dist ~leaf_size `Random query
+      and refr_t = create P.dist ~leaf_size `Random refr in
 
       let time =
         P.n_dist := 0;
         let start = Unix.gettimeofday () in
-        ignore (range 0.0 0.2 query_t refr_t |> Iter.to_list : P2.t list);
+        ignore (range P.dist 0.0 0.2 query_t refr_t |> Iter.to_list : P2.t list);
         let end_ = Unix.gettimeofday () in
         end_ -. start
       in
