@@ -7,7 +7,7 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        ocamlPkgs = pkgs.ocaml-ng.ocamlPackages_4_14;
+        ocamlPkgs = pkgs.ocaml-ng.ocamlPackages;
         defaultPackage = ocamlPkgs.buildDunePackage rec {
           pname = "vpt";
           version = "5.0.0";
