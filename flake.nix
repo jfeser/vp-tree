@@ -13,13 +13,17 @@
           version = "5.0.0";
           duneVersion = "3";
           src = ./.;
-          propagatedBuildInputs = with ocamlPkgs; [ base iter ppx_jane ];
+          propagatedBuildInputs = with ocamlPkgs; [ base iter ];
         };
       in {
         defaultPackage = vpt;
         devShell = pkgs.mkShell {
-          nativeBuildInputs =
-            [ pkgs.ocamlformat pkgs.opam pkgs.ocamlPackages.ocaml-lsp ];
+          nativeBuildInputs = [
+            pkgs.ocamlformat
+            pkgs.opam
+            pkgs.ocamlPackages.ocaml-lsp
+            pkgs.ocamlPackages.ppx_jane
+          ];
           inputsFrom = [ vpt ];
         };
       });

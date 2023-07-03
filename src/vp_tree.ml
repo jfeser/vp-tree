@@ -215,56 +215,6 @@ let create ?(leaf_size = 1) ?(state = Random.State.default) dist quality points
   in
   create' dist select_vp leaf_size (A.of_list points) |> fixup dist
 
-(* let rec find_nearest acc query tree = *)
-(*   match tree with *)
-(*   | Empty -> acc *)
-(*   | Node { vp; lb_low; lb_high; middle; rb_low; rb_high; left; right } -> ( *)
-(*       let x = P.dist vp query in *)
-(*       if x =. 0.0 then Some (x, vp) (\* can't get nearer than that *\) *)
-(*       else *)
-(*         let tau, acc' = *)
-(*           match acc with *)
-(*           | None -> (x, Some (x, vp)) *)
-(*           | Some (tau, best) -> *)
-(*               if x <. tau then (x, Some (x, vp)) else (tau, Some (tau, best)) *)
-(*         in *)
-(*         let il = new_open_itv (lb_low -. tau) (lb_high +. tau) in *)
-(*         let ir = new_open_itv (rb_low -. tau) (rb_high +. tau) in *)
-(*         let in_il = in_open_itv x il in *)
-(*         let in_ir = in_open_itv x ir in *)
-(*         if x <. middle then *)
-(*           match (in_il, in_ir) with *)
-(*           | false, false -> acc' *)
-(*           | true, false -> find_nearest acc' query left *)
-(*           | false, true -> find_nearest acc' query right *)
-(*           | true, true -> ( *)
-(*               match find_nearest acc' query left with *)
-(*               | None -> find_nearest acc' query right *)
-(*               | Some (tau, best) -> ( *)
-(*                   match find_nearest acc' query right with *)
-(*                   | None -> Some (tau, best) *)
-(*                   | Some (tau', best') -> *)
-(*                       if tau' <. tau then Some (tau', best') *)
-(*                       else Some (tau, best))) *)
-(*         else *)
-(*           (\* x >= middle *\) *)
-(*           match (in_ir, in_il) with *)
-(*           | false, false -> acc' *)
-(*           | true, false -> find_nearest acc' query right *)
-(*           | false, true -> find_nearest acc' query left *)
-(*           | true, true -> ( *)
-(*               match find_nearest acc' query right with *)
-(*               | None -> find_nearest acc' query left *)
-(*               | Some (tau, best) -> ( *)
-(*                   match find_nearest acc' query left with *)
-(*                   | None -> Some (tau, best) *)
-(*                   | Some (tau', best') -> *)
-(*                       if tau' <. tau then Some (tau', best') *)
-(*                       else Some (tau, best)))) *)
-
-(* let nearest_neighbor query tree = *)
-(*   Option.value_exn (find_nearest None query tree) *)
-
 let rec iter tree f =
   match tree with
   | Empty -> ()
@@ -303,10 +253,6 @@ let neighbors dist query tol tree f =
   in
   loop tree
 
-(* let is_empty = function Empty -> true | Node _ -> false *)
-
-(* let root = function Empty -> None | Node { vp; _ } -> Some vp *)
-
 (* test if the tree invariant holds.
    If it doesn't, then we are in trouble... *)
 let rec check dist = function
@@ -318,66 +264,6 @@ let rec check dist = function
       && Iter.for_all (fun p -> dist vp p <. middle) (iter left)
       && Iter.for_all (fun p -> dist vp p >=. middle) (iter right)
       && check dist left && check dist right
-
-(* let find query tree = *)
-(*   let rec loop = function *)
-(*     | Empty -> () *)
-(*     | Node { vp; middle; left; right; _ } -> *)
-(*         let d = P.dist vp query in *)
-(*         if d =. 0.0 then raise (Found vp) *)
-(*         else if d <. middle then loop left *)
-(*         else loop right *)
-(*   in *)
-(*   try *)
-(*     loop tree; *)
-(*     None *)
-(*   with Found p -> Some p *)
-
-(* let mem query tree = Option.is_some @@ find query tree *)
-
-(* let children n = *)
-(*   match (n.left, n.right) with *)
-(*   |      *)
-(*   | (Node _ as l), (Node _ as r) -> *)
-(*           [ l; r ] *)
-(*   | Empty, (Node _ as n) | (Node _ as n), Empty -> [ n ] *)
-(*   | (Empty | Leaf _), (Empty | Leaf _) -> [] *)
-
-(* let rec traverse base score query refr = *)
-(*   match (query, refr) with *)
-(*   | Node qn, Node rn when Float.(score qn rn <> infinity) -> *)
-(*       base qn.vp rn.vp; *)
-
-(*       let qc = children qn and rc = children rn in *)
-(*       if (not (List.is_empty qc)) && not (List.is_empty rc) then *)
-(*         List.iter qc ~f:(fun qcn -> *)
-(*             List.iter rc ~f:(fun rcn -> traverse base score qcn rcn)) *)
-(*       else if not (List.is_empty qc) then *)
-(*         List.iter qc ~f:(fun qcn -> traverse base score qcn refr) *)
-(*       else if not (List.is_empty rc) then *)
-(*         List.iter rc ~f:(fun rcn -> traverse base score query rcn) *)
-(*   | _ -> () *)
-
-(* let range lower upper t t' ~f ~init = *)
-(*   let module P2 = struct *)
-(*     type t = P.t * P.t [@@deriving compare, hash, sexp] *)
-(*   end in *)
-(*   let neighbors = ref init and called = Hash_set.create (module P2) in *)
-
-(*   let base p p' = *)
-(*     let d = P.dist p p' in *)
-(*     if (lower <=. d && d <=. upper) && not (Hash_set.mem called (p, p')) then *)
-(*       neighbors := f !neighbors p p' *)
-(*   in *)
-(*   let score n n' = *)
-(*     let _dmin = *)
-(*       Float.max 0. @@ (P.dist n.vp n'.vp -. n.lb_high -. n'.lb_high) *)
-(*     in *)
-(*     1.0 *)
-(*     (\* if Float.(lower <=. dmin && dmin <=. upper) then dmin else Float.infinity *\) *)
-(*   in *)
-(*   traverse base score t t'; *)
-(*   !neighbors *)
 
 let rec range dist lower upper t t' f =
   match (t, t') with

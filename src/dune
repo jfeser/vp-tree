@@ -1,6 +1,3 @@
 (library
- (name vpt)
  (public_name vpt)
- (libraries base iter)
- (inline_tests)
- (preprocess (pps ppx_jane)))
+ (libraries base iter))

@@ -35,7 +35,6 @@ val create :
 If you have 100k or more points, use a `Good or `Random tree. *)
 
 val length : 'a t -> int
-
 val iter : 'a t -> ('a -> unit) -> unit
 
 val check : ('a -> 'a -> float) -> 'a t -> bool
@@ -55,3 +54,9 @@ val range :
   'b t ->
   ('a * 'b -> unit) ->
   unit
+
+module For_testing : sig
+  module Quickselect : sig
+    val select : float array -> int -> int -> int -> float
+  end
+end
